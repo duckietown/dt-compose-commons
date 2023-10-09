@@ -1,0 +1,8 @@
+name: "dt-compose-commons"
+maintainer:
+    name: "Andrea F. Daniele"
+    email: "afdaniele@duckietown.com"
+description: "Common configuration of an instance of \\compose\\ for Duckietown"
+version: 0.0.0
+# pick an icon from: https://fontawesome.com/v4.7.0/icons/
+icon: square

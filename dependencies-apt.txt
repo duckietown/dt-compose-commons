@@ -1,0 +1,4 @@
+# LIST YOUR APT PACKAGES HERE
+
+# needed by the compose entrypoint
+sudo
