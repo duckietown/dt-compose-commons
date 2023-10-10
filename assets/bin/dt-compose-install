@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+# set umask ( 002 = u::rw-,g::rw-,o::r-- ), we need the group to be able to write
+umask 0002
+
+# run package manager
+exec python3 ${COMPOSE_DIR}/public_html/system/lib/python/compose/package_manager.py \
+  --install $(awk -F: '/^[^#]/ { print $1 }' $1 | uniq)
