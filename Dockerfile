@@ -17,7 +17,7 @@ ARG PROJECT_ICON="cube"
 ARG PROJECT_FORMAT_VERSION
 # - php and \compose\
 ARG PHP_VERSION=7.0
-ARG COMPOSE_VERSION=1.3.1
+ARG COMPOSE_VERSION=1.3.3
 
 # open compose as source
 FROM docker.io/afdaniele/compose:v${COMPOSE_VERSION}-${ARCH} as compose
@@ -131,12 +131,16 @@ ENV COMPOSE_DIR="${APP_DIR}/html" \
     COMPOSE_URL="https://github.com/afdaniele/compose.git" \
     COMPOSE_USERDATA_DIR="/user-data" \
     COMPOSE_METADATA_DIR="/compose" \
+    COMPOSE_USER="${DT_USER_NAME}" \
     HTTP_PORT=80 \
     HTTPS_PORT=443 \
     SSL_CERTFILE="${SSL_DIR}/certfile.pem" \
     SSL_KEYFILE="${SSL_DIR}/privkey.pem" \
     PHP_VERSION=${PHP_VERSION} \
     COMPOSE_VERSION=${COMPOSE_VERSION}
+
+# copy binaries
+COPY ./assets/bin/. /usr/local/bin/
 
 # copy compose dirs
 COPY --from=compose ${APP_DIR} ${APP_DIR}
@@ -148,7 +152,6 @@ RUN dt-apt-install ${COMPOSE_METADATA_DIR}/dependencies-apt.txt
 
 # PHP modules
 RUN add-apt-repository -y ppa:ondrej/php && \
-    add-apt-repository -y ppa:nginx/stable && \
     apt-get install --no-install-recommends --yes \
         nginx \
         php7.0-apcu \
@@ -164,7 +167,8 @@ RUN add-apt-repository -y ppa:ondrej/php && \
         php7.0-zip \
         php7.0-xml \
         php7.0-soap \
-        php7.0-mbstring
+        php7.0-mbstring \
+    && rm -rf /var/lib/apt/lists/*
 
 # configure php-fpm
 COPY --from=compose  /etc/php/7.0/fpm /etc/php/7.0/fpm
@@ -181,8 +185,13 @@ COPY --from=compose /etc/nginx/sites-available/default /etc/nginx/sites-availabl
 # configure entrypoint
 COPY --from=compose /entrypoint.sh /compose-entrypoint.sh
 
-# give ownership to www-data
-RUN chown -R www-data:www-data "${APP_DIR}" "${COMPOSE_USERDATA_DIR}" "${COMPOSE_METADATA_DIR}"
+# configure nginx and php-fpm to run as a different user
+RUN sed -i "s/www-data/${DT_USER_NAME}/g" /etc/php/7.0/fpm/pool.d/www.conf && \
+    sed -i "s/www-data/${DT_USER_NAME}/g" /etc/nginx/nginx.conf
+
+# give ownership to the user and allow the group to write to the user-data directory
+RUN chown -R ${DT_USER_NAME}:${DT_GROUP_NAME} "${APP_DIR}" "${COMPOSE_USERDATA_DIR}" "${COMPOSE_METADATA_DIR}" && \
+    chmod g+w -R "${COMPOSE_USERDATA_DIR}"
 
 # configure health check
 HEALTHCHECK \
