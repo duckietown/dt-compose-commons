@@ -193,15 +193,6 @@ RUN sed -i "s/www-data/${DT_USER_NAME}/g" /etc/php/7.0/fpm/pool.d/www.conf && \
 RUN chown -R ${DT_USER_NAME}:${DT_GROUP_NAME} "${APP_DIR}" "${COMPOSE_USERDATA_DIR}" "${COMPOSE_METADATA_DIR}" && \
     chmod g+w -R "${COMPOSE_USERDATA_DIR}"
 
-# configure health check
-HEALTHCHECK \
-  --interval=30s \
-  --timeout=8s \
-  CMD \
-    curl --fail "http://localhost:${HTTP_PORT}/script.php?script=healthcheck" > /dev/null 2>&1 \
-    || \
-    exit 1
-
 # configure HTTP/HTTPS port
 EXPOSE ${HTTP_PORT}/tcp
 EXPOSE ${HTTPS_PORT}/tcp
