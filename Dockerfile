@@ -20,7 +20,7 @@ ARG PHP_VERSION=7.4
 ARG COMPOSE_VERSION=1.3.3
 
 # open compose as source
-FROM docker.io/afdaniele/compose:v${COMPOSE_VERSION}-${ARCH} as compose
+FROM docker.io/duckietown/compose:v${COMPOSE_VERSION}-${ARCH} as compose
 
 # ==================================================>
 # ==> Do not change the code below this line
