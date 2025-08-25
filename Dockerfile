@@ -16,7 +16,7 @@ ARG PROJECT_MAINTAINER
 ARG PROJECT_ICON="cube"
 ARG PROJECT_FORMAT_VERSION
 # - php and \compose\
-ARG PHP_VERSION=7.0
+ARG PHP_VERSION=7.4
 ARG COMPOSE_VERSION=1.3.3
 
 # open compose as source
@@ -41,7 +41,6 @@ ARG BASE_TAG
 ARG BASE_REPOSITORY
 ARG BASE_ORGANIZATION
 ARG LAUNCHER
-ARG PHP_VERSION
 ARG COMPOSE_VERSION
 # - buildkit
 ARG TARGETPLATFORM
@@ -152,26 +151,26 @@ RUN dt-apt-install ${COMPOSE_METADATA_DIR}/dependencies-apt.txt
 
 # PHP modules
 RUN add-apt-repository -y ppa:ondrej/php && \
-    apt-get install --no-install-recommends --yes \
+        apt-get update && \
+        apt-get install --no-install-recommends --yes \
         nginx \
-        php7.0-apcu \
-        php7.0-cli \
-        php7.0-fpm \
-        php7.0-mysql \
-        php7.0-curl \
-        php7.0-memcached \
-        php7.0-gd \
-        php7.0-mcrypt \
-        php7.0-tidy \
-        php7.0-bcmath \
-        php7.0-zip \
-        php7.0-xml \
-        php7.0-soap \
-        php7.0-mbstring \
+        php${PHP_VERSION}-apcu \
+        php${PHP_VERSION}-cli \
+        php${PHP_VERSION}-fpm \
+        php${PHP_VERSION}-mysql \
+        php${PHP_VERSION}-curl \
+        php${PHP_VERSION}-memcached \
+        php${PHP_VERSION}-gd \
+        php${PHP_VERSION}-tidy \
+        php${PHP_VERSION}-bcmath \
+        php${PHP_VERSION}-zip \
+        php${PHP_VERSION}-xml \
+        php${PHP_VERSION}-soap \
+        php${PHP_VERSION}-mbstring \
     && rm -rf /var/lib/apt/lists/*
 
 # configure php-fpm
-COPY --from=compose  /etc/php/7.0/fpm /etc/php/7.0/fpm
+COPY --from=compose  /etc/php/${PHP_VERSION}/fpm /etc/php/${PHP_VERSION}/fpm
 
 # install composer
 COPY --from=compose /usr/local/bin/composer /usr/local/bin/composer
@@ -186,7 +185,7 @@ COPY --from=compose /etc/nginx/sites-available/default /etc/nginx/sites-availabl
 COPY --from=compose /entrypoint.sh /compose-entrypoint.sh
 
 # configure nginx and php-fpm to run as a different user
-RUN sed -i "s/www-data/${DT_USER_NAME}/g" /etc/php/7.0/fpm/pool.d/www.conf && \
+RUN sed -i "s/www-data/${DT_USER_NAME}/g" /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf && \
     sed -i "s/www-data/${DT_USER_NAME}/g" /etc/nginx/nginx.conf
 
 # give ownership to the user and allow the group to write to the user-data directory
