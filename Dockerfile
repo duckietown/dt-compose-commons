@@ -17,10 +17,10 @@ ARG PROJECT_ICON="cube"
 ARG PROJECT_FORMAT_VERSION
 # - php and \compose\
 ARG PHP_VERSION=7.4
-ARG COMPOSE_VERSION=1.3.3
+ARG COMPOSE_VERSION=1.3.4
 
 # open compose as source
-FROM docker.io/duckietown/compose:v${COMPOSE_VERSION}-${ARCH} as compose
+FROM duckietown/compose:v${COMPOSE_VERSION}-${ARCH} as compose
 
 # ==================================================>
 # ==> Do not change the code below this line
@@ -148,7 +148,7 @@ COPY --from=compose ${COMPOSE_METADATA_DIR} ${COMPOSE_METADATA_DIR}
 
 # install compose apt dependencies
 RUN dt-apt-install ${COMPOSE_METADATA_DIR}/dependencies-apt.txt
-
+ARG PHP_VERSION=7.4
 # PHP modules
 RUN add-apt-repository -y ppa:ondrej/php && \
         apt-get update && \
