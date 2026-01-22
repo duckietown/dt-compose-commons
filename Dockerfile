@@ -17,7 +17,7 @@ ARG PROJECT_ICON="cube"
 ARG PROJECT_FORMAT_VERSION
 # - php and \compose\
 ARG PHP_VERSION=7.4
-ARG COMPOSE_VERSION=1.3.4
+ARG COMPOSE_VERSION=1.3.5
 
 # open compose as source
 FROM duckietown/compose:v${COMPOSE_VERSION}-${ARCH} as compose
