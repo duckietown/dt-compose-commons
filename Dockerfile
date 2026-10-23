@@ -16,8 +16,8 @@ ARG PROJECT_MAINTAINER
 ARG PROJECT_ICON="cube"
 ARG PROJECT_FORMAT_VERSION
 # - php and \compose\
-ARG PHP_VERSION=7.4
-ARG COMPOSE_VERSION=1.3.5
+ARG PHP_VERSION=8.3
+ARG COMPOSE_VERSION
 
 # open compose as source
 FROM duckietown/compose:v${COMPOSE_VERSION}-${ARCH} as compose
@@ -42,6 +42,7 @@ ARG BASE_REPOSITORY
 ARG BASE_ORGANIZATION
 ARG LAUNCHER
 ARG COMPOSE_VERSION
+ARG PHP_VERSION
 # - buildkit
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -58,7 +59,9 @@ RUN dt-args-check \
     "ARCH" "${ARCH}" \
     "DISTRO" "${DISTRO}" \
     "DOCKER_REGISTRY" "${DOCKER_REGISTRY}" \
-    "BASE_REPOSITORY" "${BASE_REPOSITORY}"
+    "BASE_REPOSITORY" "${BASE_REPOSITORY}" \
+    "COMPOSE_VERSION" "${COMPOSE_VERSION}" \
+    "PHP_VERSION" "${PHP_VERSION}"
 RUN dt-check-project-format "${PROJECT_FORMAT_VERSION}"
 
 # define/create repository path
@@ -140,6 +143,7 @@ ENV COMPOSE_DIR="${APP_DIR}/html" \
 
 # copy binaries
 COPY ./assets/bin/. /usr/local/bin/
+COPY --from=compose /usr/local/bin/check-php-security /usr/local/bin/check-php-security
 
 # copy compose dirs
 COPY --from=compose ${APP_DIR} ${APP_DIR}
@@ -148,7 +152,6 @@ COPY --from=compose ${COMPOSE_METADATA_DIR} ${COMPOSE_METADATA_DIR}
 
 # install compose apt dependencies
 RUN dt-apt-install ${COMPOSE_METADATA_DIR}/dependencies-apt.txt
-ARG PHP_VERSION=7.4
 # PHP modules
 RUN add-apt-repository -y ppa:ondrej/php && \
         apt-get update && \
@@ -156,6 +159,7 @@ RUN add-apt-repository -y ppa:ondrej/php && \
         nginx \
         php${PHP_VERSION}-apcu \
         php${PHP_VERSION}-cli \
+        php${PHP_VERSION}-common \
         php${PHP_VERSION}-fpm \
         php${PHP_VERSION}-mysql \
         php${PHP_VERSION}-curl \
@@ -167,6 +171,7 @@ RUN add-apt-repository -y ppa:ondrej/php && \
         php${PHP_VERSION}-xml \
         php${PHP_VERSION}-soap \
         php${PHP_VERSION}-mbstring \
+    && check-php-security "${PHP_VERSION}" \
     && rm -rf /var/lib/apt/lists/*
 
 # configure php-fpm
@@ -177,6 +182,8 @@ COPY --from=compose /usr/local/bin/composer /usr/local/bin/composer
 
 # configure PHP and plugins as done by \compose\
 COPY --from=compose /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=compose /etc/php/${PHP_VERSION}/mods-available /etc/php/${PHP_VERSION}/mods-available
+RUN phpenmod -v "${PHP_VERSION}" apcu compose-log-errors
 
 # copy nginx configuration file
 COPY --from=compose /etc/nginx/sites-available/default /etc/nginx/sites-available/default
