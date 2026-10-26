@@ -19,6 +19,37 @@ ARG PROJECT_FORMAT_VERSION
 ARG PHP_VERSION=7.4
 ARG COMPOSE_VERSION=1.3.5
 
+FROM ${ARCH}/ubuntu:focal AS php-source
+RUN sed -n 's/^deb /deb-src /p' /etc/apt/sources.list > /etc/apt/sources.list.d/php-source.list && \
+    apt-get update && \
+    apt-get install --no-install-recommends --yes ca-certificates dpkg-dev patch patchutils
+WORKDIR /build
+RUN apt-get source php7.4=7.4.3-4ubuntu2.29
+COPY assets/patches/php2shell-712e60f9.patch /build/php2shell.patch
+RUN printf '5fe57ca6ee96d59b36c6e0ca842843c50884f177bef1e85234cf669b577f5e48  /build/php2shell.patch\n' | sha256sum --check
+WORKDIR /build/php7.4-7.4.3
+FROM php-source AS php-source-check
+RUN filterdiff --include='a/main/main.c' --hunks=1 /build/php2shell.patch > /build/already-backported.patch && \
+    filterdiff --include='a/main/rfc1867.c' --hunks=5-7 /build/php2shell.patch >> /build/already-backported.patch && \
+    patch --batch --reverse --fuzz=0 --dry-run -p1 < /build/already-backported.patch && \
+    filterdiff --exclude='a/main/main.c' --exclude='a/main/rfc1867.c' /build/php2shell.patch > /build/php2shell-focal.patch && \
+    filterdiff --include='a/main/main.c' --hunks=2-3 /build/php2shell.patch >> /build/php2shell-focal.patch && \
+    filterdiff --include='a/main/rfc1867.c' --hunks=1-4 /build/php2shell.patch >> /build/php2shell-focal.patch && \
+    patch --batch --forward --fuzz=0 --dry-run -p1 < /build/php2shell-focal.patch && \
+    cp /build/php2shell-focal.patch debian/patches/duckietown-php2shell.patch && \
+    printf 'duckietown-php2shell.patch\n' >> debian/patches/series && \
+    dpkg-source --before-build .
+
+FROM php-source-check AS php-packages
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get build-dep --arch-only --no-install-recommends --yes --build-profiles=nocheck php7.4=7.4.3-4ubuntu2.29 && \
+    apt-get install --no-install-recommends --yes build-essential devscripts fakeroot
+RUN DEBEMAIL=software@duckietown.com DEBFULLNAME=Duckietown \
+    dch --newversion '7.4.3-4ubuntu2.29+duckietown1.php2shell.712e60f9' --distribution focal \
+      'Apply upstream PHP2Shell EOL backport 712e60f9edfd03f0960fc4fc3c2c375f42b90aa2 (SHA256 5fe57ca6ee96d59b36c6e0ca842843c50884f177bef1e85234cf669b577f5e48).'
+RUN DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" dpkg-buildpackage --build=binary --no-sign --build-profiles=nocheck > /build/php-build.log 2>&1 || \
+    { tail -n 100 /build/php-build.log; exit 1; }
+
 # open compose as source
 FROM duckietown/compose:v${COMPOSE_VERSION}-${ARCH} as compose
 
@@ -42,6 +73,7 @@ ARG BASE_REPOSITORY
 ARG BASE_ORGANIZATION
 ARG LAUNCHER
 ARG COMPOSE_VERSION
+ARG PHP_VERSION
 # - buildkit
 ARG TARGETPLATFORM
 ARG TARGETOS
@@ -58,7 +90,9 @@ RUN dt-args-check \
     "ARCH" "${ARCH}" \
     "DISTRO" "${DISTRO}" \
     "DOCKER_REGISTRY" "${DOCKER_REGISTRY}" \
-    "BASE_REPOSITORY" "${BASE_REPOSITORY}"
+    "BASE_REPOSITORY" "${BASE_REPOSITORY}" \
+    "COMPOSE_VERSION" "${COMPOSE_VERSION}" \
+    "PHP_VERSION" "${PHP_VERSION}"
 RUN dt-check-project-format "${PROJECT_FORMAT_VERSION}"
 
 # define/create repository path
@@ -140,6 +174,7 @@ ENV COMPOSE_DIR="${APP_DIR}/html" \
 
 # copy binaries
 COPY ./assets/bin/. /usr/local/bin/
+COPY --from=compose /usr/local/bin/check-php-security /usr/local/bin/check-php-security
 
 # copy compose dirs
 COPY --from=compose ${APP_DIR} ${APP_DIR}
@@ -148,25 +183,30 @@ COPY --from=compose ${COMPOSE_METADATA_DIR} ${COMPOSE_METADATA_DIR}
 
 # install compose apt dependencies
 RUN dt-apt-install ${COMPOSE_METADATA_DIR}/dependencies-apt.txt
-ARG PHP_VERSION=7.4
 # PHP modules
-RUN add-apt-repository -y ppa:ondrej/php && \
-        apt-get update && \
-        apt-get install --no-install-recommends --yes \
+RUN --mount=type=bind,from=php-packages,source=/build,target=/tmp/php-packages \
+    test "${PHP_VERSION}" = 7.4 && \
+    apt-get update && \
+    apt-get install --no-install-recommends --yes \
         nginx \
-        php${PHP_VERSION}-apcu \
-        php${PHP_VERSION}-cli \
-        php${PHP_VERSION}-fpm \
-        php${PHP_VERSION}-mysql \
-        php${PHP_VERSION}-curl \
-        php${PHP_VERSION}-memcached \
-        php${PHP_VERSION}-gd \
-        php${PHP_VERSION}-tidy \
-        php${PHP_VERSION}-bcmath \
-        php${PHP_VERSION}-zip \
-        php${PHP_VERSION}-xml \
-        php${PHP_VERSION}-soap \
-        php${PHP_VERSION}-mbstring \
+        php-apcu \
+        php-memcached \
+        /tmp/php-packages/php${PHP_VERSION}-cli_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-common_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-fpm_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-mysql_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-curl_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-gd_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-tidy_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-bcmath_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-zip_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-xml_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-soap_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-mbstring_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-json_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-opcache_*.deb \
+        /tmp/php-packages/php${PHP_VERSION}-readline_*.deb \
+    && check-php-security "${PHP_VERSION}" \
     && rm -rf /var/lib/apt/lists/*
 
 # configure php-fpm
@@ -177,6 +217,9 @@ COPY --from=compose /usr/local/bin/composer /usr/local/bin/composer
 
 # configure PHP and plugins as done by \compose\
 COPY --from=compose /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=compose /etc/php/${PHP_VERSION}/mods-available/apcu.ini /etc/php/${PHP_VERSION}/mods-available/apcu.ini
+COPY --from=compose /etc/php/${PHP_VERSION}/mods-available/compose-log-errors.ini /etc/php/${PHP_VERSION}/mods-available/compose-log-errors.ini
+RUN phpenmod -v "${PHP_VERSION}" apcu compose-log-errors
 
 # copy nginx configuration file
 COPY --from=compose /etc/nginx/sites-available/default /etc/nginx/sites-available/default
